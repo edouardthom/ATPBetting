@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+#### TEST souuldn't be here!!!
+
 from datetime import datetime,timedelta
 
 from past_features import *
@@ -254,11 +257,3 @@ for nm in range(5,600):
     s=np.nanstd(profits)
     stds.append(s)
 
-stds10=stds
-stds30=stds
-stds50=stds
-
-
-plt.plot(range(5,600),np.array(stds30))
-plt.plot(range(5,600),np.array(stds50))
-plt.plot(range(5,600),np.array(stds10))
