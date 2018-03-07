@@ -2,12 +2,27 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
-from datetime import timedelta
 import matplotlib.pyplot as plt
-from ml import *
+import xgboost as xgb
 import seaborn as sns
 
 ############################### STRATEGY ASSESSMENT ############################
+
+def xgbModelBinary(xtrain,ytrain,xtest,ytest,p,sample_weights=None):
+	#Here xtest and ytest are also used for early stopping (validation set)
+	if sample_weights==None:
+		dtrain=xgb.DMatrix(xtrain,label=ytrain)
+	else:
+		dtrain=xgb.DMatrix(xtrain,label=ytrain,weight=sample_weights)
+	dtest=xgb.DMatrix(xtest,label=ytest)
+	eval_set = [(dtrain,"train_loss"),(dtest, 'eval')]
+	params={'eval_metric':"logloss","objective":"binary:logistic",'subsample':0.8,
+		 'min_child_weight':p[2],'alpha':p[6],'lambda':p[5],'max_depth':int(p[1]),
+		 'gamma':p[3],'eta':p[0],'colsample_bytree':p[4]}
+	model=xgb.train(params, dtrain, int(p[7]),evals=eval_set,early_stopping_rounds=int(p[8]))
+	prediction= model.predict(dtest)
+	return prediction,model
+
 
 def sel_match_confidence(x):
     """
@@ -19,7 +34,14 @@ def sel_match_confidence(x):
         return x[1]/x[3] 
 
 def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_val_matches,duration_test_matches,xgb_params,nb_players,nb_tournaments,xtrain,data,model_name="0"):
-
+    """
+    Given the ids of the first match of the testing set (id=index in the dataframe "data"),
+    outputs the confidence dataframe.
+    The confidence dataframe tells for each match is our prediction is right, and for
+    the outcome we chose, the confidence level.
+    the confidence level is simply the probability we predicted divided by the probability
+    implied by the bookmaker (=1/odd).
+    """
     ########## Training/validation/testing set generation
     
     # Number of matches we in our training set 
@@ -133,7 +155,7 @@ def profitComputation(percentage_matchs,conf,model_name="0"):
     """
     Given a confidence dataset and a percentage of matches, computes the ROI 
     if we bet only on the percentage of matches we have the most confidence in
-    (same amount for each match).
+    (same amount of money for each match).
     """
     coeff=percentage_matchs/100
     lim=int(coeff*len(conf))

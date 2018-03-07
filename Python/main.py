@@ -6,6 +6,9 @@ from past_features import *
 from elo_features import *
 from categorical_features import *
 from stategy_assessment import *
+from utilities import *
+
+
 
 ################################################################################
 ######################### Building of the raw dataset ##########################
@@ -13,7 +16,7 @@ from stategy_assessment import *
 
 ### Importation of the Excel files - 1 per year
 import glob
-filenames=list(glob.glob("20*.xls*"))
+filenames=list(glob.glob("../Data/20*.xls*"))
 l = [pd.read_excel(filename,encoding='latin-1') for filename in filenames]
 no_b365=[i for i,d in enumerate(l) if "B365W" not in l[i].columns]
 no_pi=[i for i,d in enumerate(l) if "PSW" not in l[i].columns]
@@ -34,13 +37,53 @@ data["LRank"]=data["LRank"].replace(np.nan,0)
 data["LRank"]=data["LRank"].replace("NR",2000)
 data["WRank"]=data["WRank"].astype(int)
 data["LRank"]=data["LRank"].astype(int)
+data["Wsets"]=data["Wsets"].astype(float)
+data["Lsets"]=data["Lsets"].replace("`1",1)
+data["Lsets"]=data["Lsets"].astype(float)
 data=data.reset_index(drop=True)
 
+### Elo rankings data
+ranking_elo=compute_elo_rankings(data)
+data=pd.concat([data,ranking_elo],1)
+
 ### Storage of the raw dataset
-data.to_csv("atp_data.csv",index=False)
+data.to_csv("../Generated Data/atp_data.csv",index=False)
 
 
 
+
+
+################################################################################
+####################### Study of simple winner prediction ######################
+################################################################################
+
+# Comparison of different techniques for the winner prediction
+# Interval for the comparison : [beg,end]
+beg=datetime(2013,1,1)
+end=data.Date.iloc[-1]
+indices=data[(data.Date>=beg)&(data.Date<=end)].index
+# classical ATP ranking
+test=data[["WRank","LRank"]].iloc[indices,:]
+atp=100*(test.LRank>test.WRank).sum()/len(indices)
+# Elo ranking
+test=ranking_elo.iloc[indices,:]
+elo=100*(test.elo_winner>test.elo_loser).sum()/len(indices)
+# Bookmakers
+test=data.iloc[indices,:]
+book_pi=100*(test.PSW<test.PSL).sum()/len(indices)
+book_365=100*(test.B365W<test.B365L).sum()/len(indices)
+# Our prediction
+conf=pd.read_csv("../Generated Data/confidence_data.csv")
+our=100*conf.win0.sum()/len(conf)
+# Plot
+labels=["Prediction with ATP ranking","with Elo ranking",
+        "with smallest odd (Bet365)","with smallest odd (Pinnacle)",
+        "our prediction"]
+values=[atp,elo,book_pi,book_365,our]
+xaxis_label="% of matches correctly predicted"
+title="Prediction of all matches since Jan. 2013 ("+str(len(indices))+" matches)"
+xlim=[65,70]
+basic_horizontal_barplot(values,labels,xaxis_label,title,xlim,figsize=None)
 
 
 
@@ -52,6 +95,8 @@ data.to_csv("atp_data.csv",index=False)
 ###################### Building of the enriched dataset ########################
 ################################################################################
 
+data=pd.read_csv("../Generated Data/atp_data.csv")
+data.Date = data.Date.apply(lambda x:datetime.strptime(x, '%Y-%m-%d'))
 
 ########################## Encoding of categorical features ####################
 
@@ -63,10 +108,6 @@ tournaments_encoded=tournaments_features_encoding(nb_tournaments,data)
 players_encoded=players_features_encoding(nb_players,data)
 cat_features=pd.concat([cat_features,tournaments_encoded,players_encoded],1)
 
-### Elo rankings data
-ranking_elo=compute_elo_rankings(data)
-
-
 ######################### The period that interests us #########################
 
 beg=datetime(2008,1,1) #prior to 2003, Date is the starting date of the tournament
@@ -75,18 +116,18 @@ indices=data[(data.Date>beg)&(data.Date<=end)].index
 
 ################### Building of some features based on the past ################
 
-player_features=build_dataset(playerFeatures,5,"playerft5",data,indices)
-duo_features=build_dataset(duoFeatures,150,"duoft",data,indices)
-general_features=build_dataset(generalFeatures,150,"generalft",data,indices)
-recent_features=build_dataset(playerRecentMatchesFeatures,150,"recentft",data,indices)
-dump(player_features,"player_features")
-dump(duo_features,"duo_features")
-dump(general_features,"general_features")
-dump(recent_features,"recent_features")
-#playerft5=load("playerft5")
-#duoft=load("duoft")
-#generalft=load("generalft")
-#recentft=load("recentft")
+#player_features=build_dataset(playerFeatures,5,"playerft5",data,indices)
+#duo_features=build_dataset(duoFeatures,150,"duoft",data,indices)
+#general_features=build_dataset(generalFeatures,150,"generalft",data,indices)
+#recent_features=build_dataset(playerRecentMatchesFeatures,150,"recentft",data,indices)
+#dump(player_features,"player_features")
+#dump(duo_features,"duo_features")
+#dump(general_features,"general_features")
+#dump(recent_features,"recent_features")
+player_features=load("player_features")
+duo_features=load("duo_features")
+general_features=load("general_features")
+recent_features=load("recent_features")
 
 ########################### Selection of our period ############################
 
@@ -121,10 +162,7 @@ xtrain=pd.concat([cotes_features,
                   cat_features,
                   player_features,duo_features,general_features,recent_features],1)
 
-xtrain.to_csv("atp_data_features.csv",index=False)
-
-
-
+xtrain.to_csv("../Generated Data/atp_data_features.csv",index=False)
 
 
 
@@ -134,7 +172,7 @@ xtrain.to_csv("atp_data_features.csv",index=False)
 #################### Strategy assessment - ROI computing #######################
 ################################################################################
 
-## We adopt a rolling method. We predict the outcome of X consecutive matches , 
+## We adopt a rolling method. We predict the outcome of delta consecutive matches , 
 ## with the N previous matches. A small subset of the training set is devoted to
 ## validation (the consecutive matches right before the testing matches)
 
@@ -171,51 +209,60 @@ for test_beginning_match in key_matches:
     confs.append(conf)
 confs=[el for el in confs if type(el)!=int]
 conf=pd.concat(confs,0)
-
-## Plot of the profits
-plotProfits(conf,"Test on the period Jan. 2013 -> March 2018")
-
-
-################ See the profit along time (variance check) #####################
-
+## We add the date to the confidence dataset
 dates=data.Date.reset_index()
 dates.columns=["match","date"]
 conf=conf.merge(dates,on="match")
 conf=conf.sort_values("confidence0",ascending=False)
-confconf=conf.iloc[:int(0.3*len(conf)),:]
-profitComputation(100,confconf)
+conf=conf.reset_index(drop=True)
+
+## We store this dataset
+conf.to_csv("../Generated Data/confidence_data.csv",index=False)
+
+## Plot of ROI according to the % of matches we bet on
+plotProfits(conf,"Test on the period Jan. 2013 -> March 2018")
 
 
-start_date=datetime(2013,1,1) #it's a monday
-start_match=data[data.Date==start_date].index[0]
-span_matches=len(data)-start_match+1
-matches_delta=100
-N=int(span_matches/matches_delta)+1
-milestones=np.array([start_match+matches_delta*i for i in range(N)])
-profits=[]
-lens=[]
-for i in range(N-1):
-    beg=milestones[i]
-    end=milestones[i+1]-1
-    conf_sel=confconf[(confconf.match>=beg)&(confconf.match<=end)]
-    l=len(conf_sel)
-    lens.append(l)
-    if l==0:
-        profits.append(0)
-    else:    
-        p=profitComputation(100,conf_sel)
-        profits.append(p)
-profits=np.array(profits)
+################################################################################
+######################### ROI variability along time ###########################
+################################################################################
 
+## We bet only on 35% of the matches
+confconf=conf.iloc[:int(0.35*len(conf)),:]
+
+def profitsAlongTime(conf,matches_delta):
+    span_matches=span_matches=conf.match.max()-conf.match.min()-1
+    N=int(span_matches/matches_delta)+1
+    milestones=np.array([conf.match.min()+matches_delta*i for i in range(N)])
+    profits=[]
+    lens=[]
+    for i in range(N-1):
+        beg=milestones[i]
+        end=milestones[i+1]-1
+        conf_sel=confconf[(conf.match>=beg)&(conf.match<=end)]
+        l=len(conf_sel)
+        lens.append(l)
+        if l==0:
+            profits.append(0)
+        else:    
+            p=profitComputation(100,conf_sel)
+            profits.append(p)
+    profits=np.array(profits)
+    return profits,lens
+
+matches_delta=117
+profits,lens=profitsAlongTime(confconf,matches_delta)
 
 fig=plt.figure(figsize=(5.5,3))
-ax = fig.add_axes([0,0,1,1])  
+ax = fig.add_axes([0,0,1,0.9])  
 ax.plot(profits,linewidth=2,marker="o")
+plt.suptitle("Betting on sections of 100 matches")
+ax.set_xlabel("From 2013 to 2018")
+ax.set_ylabel("ROI")
 
-
-
-plt.plot(lens)
-
-
-
-
+fig=plt.figure(figsize=(5.5,3))
+ax = fig.add_axes([0,0,1,0.9])  
+ax.plot(lens,linewidth=2,marker="o")
+plt.suptitle("Betting on sections of 100 matches")
+ax.set_xlabel("From 2013 to 2018")
+ax.set_ylabel("For each section, number of matches we bet on")

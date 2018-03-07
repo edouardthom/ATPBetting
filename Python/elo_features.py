@@ -25,24 +25,8 @@ def compute_elo_rankings(data):
         elo[w]=new_elow
         elo[l]=new_elol
         ranking_elo.append((elo[data.iloc[i,:].Winner],elo[data.iloc[i,:].Loser])) 
-        if i%1000==0:
-            print(i)
+        if i%5000==0:
+            print(str(i)+" matches computed...")
     ranking_elo=pd.DataFrame(ranking_elo,columns=["elo_winner","elo_loser"])    
     ranking_elo["proba_elo"]=1 / (1 + 10 ** ((ranking_elo["elo_loser"] - ranking_elo["elo_winner"]) / 400))   
     return ranking_elo
-
-
-########### Comparison ATP ranking vs. Elo vs. bookmakers for the winner prediction
-# Interval for the comparison
-#beg=datetime(2015,1,1)
-#end=data.Date.iloc[-1]
-#indices=data[(data.Date>=beg)&(data.Date<=end)].index
-## classical ATP ranking
-#test=data[["WRank","LRank"]].iloc[indices,:]
-#100*(test.LRank>test.WRank).sum()/len(indices)
-## Elo ranking
-#test=ranking_elo.iloc[indices,:]
-#100*(test.elo_winner>test.elo_loser).sum()/len(indices)
-## Bookmakers
-#test=data.iloc[indices,:]
-#100*(test.PSW<test.PSL).sum()/len(indices)
