@@ -102,15 +102,6 @@ basic_horizontal_barplot(values,labels,xaxis_label,title,xlim,figsize=None)
 data=pd.read_csv("../Generated Data/atp_data.csv")
 data.Date = data.Date.apply(lambda x:datetime.strptime(x, '%Y-%m-%d'))
 
-########################## Encoding of categorical features ####################
-
-cat_features=data[["Series","Court","Surface","Round","Best of"]]
-cat_features=categorical_features_encoding(cat_features)
-nb_players=120
-nb_tournaments=20
-tournaments_encoded=tournaments_features_encoding(nb_tournaments,data)
-players_encoded=players_features_encoding(nb_players,data)
-cat_features=pd.concat([cat_features,tournaments_encoded,players_encoded],1)
 
 ######################### The period that interests us #########################
 ### We'll perform the training and testing during this period. But the matches before 
@@ -121,10 +112,10 @@ indices=data[(data.Date>beg)&(data.Date<=end)].index
 
 ################### Building of some features based on the past ################
 
-#player_features=build_dataset(playerFeatures,5,"playerft5",data,indices)
-#duo_features=build_dataset(duoFeatures,150,"duoft",data,indices)
-#general_features=build_dataset(generalFeatures,150,"generalft",data,indices)
-#recent_features=build_dataset(playerRecentMatchesFeatures,150,"recentft",data,indices)
+player_features=build_dataset(playerFeatures,5,"playerft5",data,indices)
+duo_features=build_dataset(duoFeatures,150,"duoft",data,indices)
+general_features=build_dataset(generalFeatures,150,"generalft",data,indices)
+recent_features=build_dataset(playerRecentMatchesFeatures,150,"recentft",data,indices)
 #dump(player_features,"player_features")
 #dump(duo_features,"duo_features")
 #dump(general_features,"general_features")
@@ -138,8 +129,15 @@ recent_features=load("recent_features")
 
 data=data.iloc[indices,:].reset_index(drop=True)
 cotes_features=data[["PSW","PSL"]]
-cat_features=cat_features.iloc[indices,:].reset_index(drop=True)
-elo_features=ranking_elo.iloc[indices,:].reset_index(drop=True)
+
+########################## Encoding of categorical features ####################
+
+cat_features=data[["Series","Court","Surface","Round","Best of","Tournament"]]
+cat_features=categorical_features_encoding(cat_features)
+players_encoded=players_features_encoding(data)
+tournaments_encoded=tournaments_features_encoding(data)
+cat_features=pd.concat([cat_features,players_encoded,tournaments_encoded],1)
+
 
 ############################### Duplication of rows ############################
 ## For the moment we have one row per match. 
@@ -147,7 +145,8 @@ elo_features=ranking_elo.iloc[indices,:].reset_index(drop=True)
 ## Of course it isn't a simple duplication of  each row, we need to "invert" some features
 
 # Elo data
-elo_1=elo_features
+ranking_elo=ranking_elo.iloc[indices,:]
+elo_1=ranking_elo
 elo_2=elo_1[["elo_loser","elo_winner","proba_elo"]]
 elo_2.columns=["elo_winner","elo_loser","proba_elo"]
 elo_2.proba_elo=1-elo_2.proba_elo
@@ -165,9 +164,9 @@ cotes_features=pd.DataFrame(cotes_features)
 ### Building of the final dataset
 # You can remove some features to see the effect on the ROI
 xtrain=pd.concat([cotes_features,
-                  #elo_features,
-                  cat_features],1)
-                  #player_features,duo_features,general_features,recent_features],1)
+                  elo_features,
+                  cat_features,
+                  player_features,duo_features,general_features,recent_features],1)
 
 xtrain.to_csv("../Generated Data/atp_data_features.csv",index=False)
 
@@ -189,7 +188,8 @@ start_date=datetime(2013,1,1) #first day of test set
 start_match=data[data.Date==start_date].index[0] #id of the first match of the testing set
 span_matches=len(data)-start_match+1
 duration_val_matches=300
-delta=2000
+duration_train_matches=10400
+duration_test_matches=2000
 
 ## Number of tournaments and players encoded directly in one-hot (the most important only)
 nb_players=50
@@ -209,10 +209,10 @@ params=np.array(np.meshgrid(learning_rate,max_depth,min_child_weight,gamma,csbt,
 xgb_params=params[0]
 
 ## We predict the confidence in each outcome, delta matches at each iteration
-key_matches=np.array([start_match+delta*i for i in range(int(span_matches/delta)+1)])
+key_matches=np.array([start_match+duration_test_matches*i for i in range(int(span_matches/duration_test_matches)+1)])
 confs=[]
 for test_beginning_match in key_matches:
-    conf=vibratingAssessStrategyGlobal(test_beginning_match,10400,duration_val_matches,delta,xgb_params,nb_players,nb_tournaments,xtrain,data)
+    conf=vibratingAssessStrategyGlobal(test_beginning_match,10400,duration_val_matches,duration_test_matches,xgb_params,nb_players,nb_tournaments,xtrain,data)
     confs.append(conf)
 confs=[el for el in confs if type(el)!=int]
 conf=pd.concat(confs,0)

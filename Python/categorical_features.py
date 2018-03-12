@@ -23,47 +23,38 @@ def categorical_features_encoding(cat_features):
     cat_features=cat_features.astype(int)
     return cat_features
 
-def players_features_encoding(nb_players,data):
+def players_features_encoding(data):
     """
     Encoding of the players . 
-    We limit the number of players : we'll keep only the 
-    players that won the most matches to avoid overfitting (usually 80 players).
-    The other players are encoded in the column "famous_player_other".
     The players are not encoded like the other categorical features because for each
     match we encode both players at the same time (we put a 1 in each row corresponding 
     to the players playing the match for each match).
     """
-    players=list(data.Winner.value_counts().index[:nb_players])
-    winners=data.Winner.apply(lambda x:x if x in players else "other")
-    losers=data.Loser.apply(lambda x:x if x in players else "other")
+    winners=data.Winner
+    losers=data.Loser
     le = preprocessing.LabelEncoder()
-    winners=le.fit_transform(winners)
+    le.fit(list(winners)+list(losers))
+    winners=le.transform(winners)
     losers=le.transform(losers)
-    encod=np.zeros([len(winners),nb_players+1])
+    encod=np.zeros([len(winners),len(le.classes_)])
     for i in range(len(winners)):
         encod[i,winners[i]]+=1
     for i in range(len(losers)):
         encod[i,losers[i]]+=1
-    players=pd.Series(range(len(players)),index=players)
-    ## The number in the column name indicates the ranking of the player (in number of matches won)
-    columns=["famous_player_"+str(players[le.classes_[i]]) if le.classes_[i]!="other" else "famous_player_other" for i in range(nb_players+1)]
+    columns=["player_"+el for el in le.classes_]
     players_encoded=pd.DataFrame(encod,columns=columns)
     return players_encoded
 
-def tournaments_features_encoding(nb_tournaments,data):
+def tournaments_features_encoding(data):
     """
-    Encoding of the tournaments . We limit the number of tournaments to avoid overfitting.
-    (see players_features_encoding)
+    Encoding of the tournaments . 
     """
-    tournaments=list(data.Tournament.value_counts().index[:nb_tournaments])
-    tournament=data.Tournament.apply(lambda x:x if x in tournaments else "other")
+    tournaments=data.Tournament
     le = preprocessing.LabelEncoder()
-    tournament=le.fit_transform(tournament)
-    encod=np.zeros([len(tournament),nb_tournaments+1])
-    for i in range(len(tournament)):
-        encod[i,tournament[i]]+=1
-    ## The number in the column name indicates the ranking of the player (in number of matches won)
-    tournaments=pd.Series(range(len(tournaments)),index=tournaments)
-    columns=["famous_tournament_"+str(tournaments[le.classes_[i]]) if le.classes_[i]!="other" else "famous_tournament_other" for i in range(nb_tournaments+1)]
+    tournaments=le.fit_transform(tournaments)
+    encod=np.zeros([len(tournaments),len(le.classes_)])
+    for i in range(len(tournaments)):
+        encod[i,tournaments[i]]+=1
+    columns=["tournament_"+el for el in le.classes_]
     tournaments_encoded=pd.DataFrame(encod,columns=columns)
     return tournaments_encoded

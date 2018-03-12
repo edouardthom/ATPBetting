@@ -59,13 +59,8 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     val_indices=range(2*beg_val,2*end_val+2)
     test_indices=range(2*beg_test,2*end_test+2)
     
-    # We keep only a limited number of players/tournaments
-    tournament_colums=[c for c in xtrain.columns if (c[:18]=="famous_tournament_")&(c[18:]!="other")]
-    to_drop=[c for c in tournament_colums if int(c[18:])>=nb_tournaments]
-    xtrain=xtrain.drop(to_drop,1)
-    player_colums=[c for c in xtrain.columns if (c[:14]=="famous_player_")&(c[14:]!="other")]
-    to_drop=[c for c in player_colums if int(c[14:])>=nb_players]
-    xtrain=xtrain.drop(to_drop,1)
+    if (len(test_indices)==0)|(len(train_indices)==0):
+        return 0
     
     # Split in train/validation/test
     xval=xtrain.iloc[val_indices,:].reset_index(drop=True)
@@ -74,8 +69,24 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     ytrain=pd.Series([1,0]*int(len(train_indices)/2))
     yval=pd.Series([1,0]*int(len(val_indices)/2))
     
-    if (len(test_indices)==0)|(len(train_indices)==0):
-        return 0
+    # We limit the number of players and tournaments one-hot encoded : we'll keep only the 
+    # players that won the most matches to avoid overfitting and make the process quicker
+    # Biggest players :
+    biggest_players=data.iloc[range(beg_train,end_train),:][["Winner","Loser"]]
+    biggest_players=pd.concat([biggest_players.Winner,biggest_players.Loser],0)
+    biggest_players=list(biggest_players.value_counts().index[:nb_players])
+    player_columns=[el for el in xtrain.columns if el[:6]=="player"]
+    to_drop_players=[el for el in player_columns if el[7:] not in biggest_players]
+    # Biggest Tournaments
+    biggest_tournaments=data.iloc[range(beg_train,end_train),:]["Tournament"]
+    biggest_tournaments=list(biggest_tournaments.value_counts().index[:nb_tournaments])
+    tournament_columns=[el for el in xtrain.columns if el[:10]=="tournament"]
+    to_drop_tournaments=[el for el in tournament_columns if el[11:] not in biggest_tournaments]
+    # We drop smallest Tournaments and players
+    xtrain=xtrain.drop(to_drop_players+to_drop_tournaments,1)
+    xval=xval.drop(to_drop_players+to_drop_tournaments,1)
+    xtest=xtest.drop(to_drop_players+to_drop_tournaments,1)
+    
     
     # ML
     pred_val,model=xgbModelBinary(xtrain,ytrain,xval,yval,xgb_params,sample_weights=None)
