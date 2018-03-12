@@ -25,3 +25,14 @@ def basic_horizontal_barplot(values,labels,xaxis_label,title,xlim=None,figsize=N
     plt.suptitle(title)
     ax.set_xlabel(xaxis_label)
     plt.show()
+    
+    
+############################### STORAGE ############################
+## Some useful functions to store and load data
+
+import pickle
+def dump(obj,name):
+	pickle.dump(obj,open(name+'.p',"wb")) 
+def load(name):
+	obj=pickle.load( open( name+".p", "rb" ) ) 
+	return obj

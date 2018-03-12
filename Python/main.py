@@ -46,6 +46,7 @@ data["Lsets"]=data["Lsets"].astype(float)
 data=data.reset_index(drop=True)
 
 ### Elo rankings data
+# Computing of the elo ranking of each player at the beginning of each match.
 ranking_elo=compute_elo_rankings(data)
 data=pd.concat([data,ranking_elo],1)
 
@@ -75,7 +76,7 @@ elo=100*(test.elo_winner>test.elo_loser).sum()/len(indices)
 test=data.iloc[indices,:]
 book_pi=100*(test.PSW<test.PSL).sum()/len(indices)
 book_365=100*(test.B365W<test.B365L).sum()/len(indices)
-# Our prediction
+# Our prediction (conf is generated below)
 conf=pd.read_csv("../Generated Data/confidence_data.csv")
 our=100*conf.win0.sum()/len(conf)
 # Plot
@@ -141,7 +142,7 @@ cat_features=pd.concat([cat_features,players_encoded,tournaments_encoded],1)
 
 ############################### Duplication of rows ############################
 ## For the moment we have one row per match. 
-## We "duplicate" each row to have one row for each outcome of the match. 
+## We "duplicate" each row to have one row for each outcome of each match. 
 ## Of course it isn't a simple duplication of  each row, we need to "invert" some features
 
 # Elo data
@@ -157,7 +158,7 @@ elo_features=pd.concat([elo_1,elo_2]).sort_index(kind='merge')
 # Categorical features
 cat_features=pd.DataFrame(np.repeat(cat_features.values,2, axis=0),columns=cat_features.columns)
 
-# cotes features
+# odds features
 cotes_features=pd.Series(cotes_features.values.flatten(),name="odds")
 cotes_features=pd.DataFrame(cotes_features)
 
@@ -191,7 +192,7 @@ duration_val_matches=300
 duration_train_matches=10400
 duration_test_matches=2000
 
-## Number of tournaments and players encoded directly in one-hot (the most important only)
+## Number of tournaments and players encoded directly in one-hot 
 nb_players=50
 nb_tournaments=5
 
@@ -208,7 +209,7 @@ early_stop=[5]
 params=np.array(np.meshgrid(learning_rate,max_depth,min_child_weight,gamma,csbt,lambd,alpha,num_rounds,early_stop)).T.reshape(-1,9).astype(np.float)
 xgb_params=params[0]
 
-## We predict the confidence in each outcome, delta matches at each iteration
+## We predict the confidence in each outcome, "duration_test_matches" matches at each iteration
 key_matches=np.array([start_match+duration_test_matches*i for i in range(int(span_matches/duration_test_matches)+1)])
 confs=[]
 for test_beginning_match in key_matches:

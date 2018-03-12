@@ -7,6 +7,7 @@ import xgboost as xgb
 import seaborn as sns
 
 ############################### STRATEGY ASSESSMENT ############################
+### the following functions are used to make the predictions and compute the ROI
 
 def xgbModelBinary(xtrain,ytrain,xval,yval,p,sample_weights=None):
     """
@@ -102,7 +103,6 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     prediction_test_winner=pred_test[range(0,len(pred_test),2)]
     prediction_test_loser=pred_test[range(1,len(pred_test),2)]
     
-    
     ### Gathering of the odds and predicted probabilities  for the testing set (1 row/match)
     cotes_full=data[["PSW","PSL"]].values.flatten()
     cotes_full=pd.Series(cotes_full,name="cotes")
@@ -129,10 +129,14 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
 
 def vibratingAssessStrategyGlobal(km,dur_train,duration_val_matches,delta,xgb_params,nb_players,nb_tournaments,xtrain,data):
     """
-    The Roi is very sensistive to the training set. A few more matches in the training set can 
-    change in a non-negligible way. Therefore it is preferable to run assessStrategyGlobal several times
+    The ROI is very sensistive to the training set. A few more matches in the training set can 
+    change it in a non-negligible way. Therefore it is preferable to run assessStrategyGlobal several times
     with slights changes in the training set lenght, and then combine the predictions.
     This is what this function does.
+    More precisely we compute the confidence dataset of 7 models with slightly different training sets.
+    For each match, each model has an opinion of the winner, and a confidence is its prediction.
+    For each match, the final chosen outcome is the outcome chosen by the most models (majority voting)
+    And the final confidence is the average of the confidences of the models that chose this outcome.
     """
     confTest1=assessStrategyGlobal(km,dur_train,duration_val_matches,delta,xgb_params,nb_players,nb_tournaments,xtrain,data,"1")
     confTest2=assessStrategyGlobal(km,dur_train-10,duration_val_matches,delta,xgb_params,nb_players,nb_tournaments,xtrain,data,"2")
@@ -201,13 +205,3 @@ def plotProfits(conf,title=""):
     plt.xlabel("% of matches we bet on")
     plt.ylabel("Return on investment (%)")
     plt.suptitle(title)
-
-
-############################### STORAGE ############################
-
-import pickle
-def dump(obj,name):
-	pickle.dump(obj,open(name+'.p',"wb")) 
-def load(name):
-	obj=pickle.load( open( name+".p", "rb" ) ) 
-	return obj
