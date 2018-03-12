@@ -120,10 +120,10 @@ recent_features=build_dataset(playerRecentMatchesFeatures,150,"recentft",data,in
 #dump(duo_features,"duo_features")
 #dump(general_features,"general_features")
 #dump(recent_features,"recent_features")
-player_features=load("player_features")
-duo_features=load("duo_features")
-general_features=load("general_features")
-recent_features=load("recent_features")
+#player_features=load("player_features")
+#duo_features=load("duo_features")
+#general_features=load("general_features")
+#recent_features=load("recent_features")
 
 ########################### Selection of our period ############################
 
@@ -178,7 +178,7 @@ xtrain.to_csv("../Generated Data/atp_data_features.csv",index=False)
 #################### Strategy assessment - ROI computing #######################
 ################################################################################
 
-## We adopt a rolling method. We predict the outcome of delta consecutive matches , 
+## We adopt a sliding window method. We predict the outcome of delta consecutive matches , 
 ## with the N previous matches. A small subset of the training set is devoted to
 ## validation (the consecutive matches right before the testing matches)
 

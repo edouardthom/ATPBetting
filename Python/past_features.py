@@ -65,6 +65,7 @@ def duoFeatures(sense,row,past):
     player1=row.Winner if sense==1 else row.Loser
     player2=row.Loser if sense==1 else row.Winner
     ##### General duo features
+    # % of the previous matches between these 2 players won by each.
     duo1=past[(past.Winner==player1)&(past.Loser==player2)]    
     duo2=past[(past.Winner==player2)&(past.Loser==player1)]    
     duo=pd.concat([duo1,duo2],0)
@@ -96,6 +97,19 @@ def getFeatures(data,nb_row,features_creation,days):
     return sense1,sense2
 
 def build_dataset(features_creation,days,feature_names_prefix,data,indices):
+    """
+    Creates features based on the past of the players. 
+    Basically a for loop. Takes 1 match at a time, selects the matches that occurred during 
+    its close past (usually 150 days before max) and computes some features.
+    Each match will appear twice in the dataset : 1 time per outcome of the match.
+    Example : 02/03/2016 Djoko-Zverev, Djoko won
+    During the 150 days before the match, Djoko won 80% of its matches and Zverev 40%.
+    We encode the outcome "Djoko wins" like that : [80,40], and tell the model this outcome happened (1).
+    We encode the outcome "Zverev wins" like that : [40,80], and tell the model it didn't happen (0).
+    This is the spirit.
+    In the inputs of the function, "indices" contains the indices of the matches we want to encode.
+    The output of the functions is twice as long as "indices".
+    """
     train_examples=[]
     for count,i in enumerate(indices):
         sense1,sense2=getFeatures(data,i,features_creation,days)
