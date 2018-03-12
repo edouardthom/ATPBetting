@@ -102,13 +102,15 @@ def build_dataset(features_creation,days,feature_names_prefix,data,indices):
     Basically a for loop. Takes 1 match at a time, selects the matches that occurred during 
     its close past (usually 150 days before max) and computes some features.
     Each match will appear twice in the dataset : 1 time per outcome of the match.
-    Example : 02/03/2016 Djoko-Zverev, Djoko won
-    During the 150 days before the match, Djoko won 80% of its matches and Zverev 40%.
-    We encode the outcome "Djoko wins" like that : [80,40], and tell the model this outcome happened (1).
-    We encode the outcome "Zverev wins" like that : [40,80], and tell the model it didn't happen (0).
-    This is the spirit.
+    Example : 02/03/2016 Djoko-Zverev ,Djoko won
+        During the 150 days before the match, Djoko won 80% of its matches and Zverev 40%.
+        We encode the outcome "Djoko wins" like that : [80,40], and tell the model this outcome happened (1).
+        We encode the outcome "Zverev wins" like that : [40,80], and tell the model it didn't happen (0).
+    And we do that with some more features , based on the players past stats on the surface
+    of the match, on the recent injuries, ...
     In the inputs of the function, "indices" contains the indices of the matches we want to encode.
     The output of the functions is twice as long as "indices".
+    (these features introduce many hyperparameters to be tuned...)
     """
     train_examples=[]
     for count,i in enumerate(indices):

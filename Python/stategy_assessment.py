@@ -93,16 +93,17 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     xval=xval.drop(to_drop_players+to_drop_tournaments,1)
     xtest=xtest.drop(to_drop_players+to_drop_tournaments,1)
     
-    
-    # ML
+    ### ML
     pred_val,model=xgbModelBinary(xtrain,ytrain,xval,yval,xgb_params,sample_weights=None)
     
-    # Prediction for the testing set
+    ### Prediction for the testing set
     dtest=xgb.DMatrix(xtest,label=None)
-    pred_test= model.predict(dtest)
-    prediction_test=pred_test[range(0,len(pred_test),2)]
+    pred_test= model.predict(dtest) #the predicted probability for all the outcomes
+    prediction_test_winner=pred_test[range(0,len(pred_test),2)]
+    prediction_test_loser=pred_test[range(1,len(pred_test),2)]
     
-    ## Strategy : Betting on better odds - TESTING SET
+    
+    ### Gathering of the odds and predicted probabilities  for the testing set (1 row/match)
     cotes_full=data[["PSW","PSL"]].values.flatten()
     cotes_full=pd.Series(cotes_full,name="cotes")
     pred_book=(1/cotes_full).iloc[test_indices].reset_index(drop=True).fillna(1)
@@ -112,14 +113,14 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     pred_p2=pred_test[range(1,len(pred_test),2)]
     p=pd.Series(list(zip(pred_p1,pred_p2,pred_book_win,pred_book_loser)))
 
-    # The model opinion on each match + the confidence
+    ### The model opinion on each match + the confidence in the chosen outcome
     bet_confidence_matches=p.apply(lambda x:sel_match_confidence(x))
-    matches_bet_good=(prediction_test>=0.5).astype(int)
+    matches_bet_good=(prediction_test_winner>prediction_test_loser).astype(int)
     test_indices_notduplicated=np.array(np.array(test_indices)[range(0,len(test_indices),2)]/2).astype(int)
     confidence=pd.DataFrame({"match":test_indices_notduplicated,"win"+model_name:matches_bet_good,"confidence"+model_name:bet_confidence_matches})
     confidenceTest=confidence.sort_values("confidence"+model_name,ascending=False)
    
-    #### For both we join the cote for the winners
+    ### We join the odds for the winners, to be able to compute the ROI later
     c=data[["PSW"]].reset_index()
     c.columns=["match","PSW"]
     confidenceTest=confidenceTest.merge(c,how="left",on="match")
@@ -128,11 +129,10 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
 
 def vibratingAssessStrategyGlobal(km,dur_train,duration_val_matches,delta,xgb_params,nb_players,nb_tournaments,xtrain,data):
     """
-    The Roi is very sensistive to the training set. One day more or less can change it 
-    substantially. Therefore it is preferable to run assessStrategyGlobal several times
+    The Roi is very sensistive to the training set. A few more matches in the training set can 
+    change in a non-negligible way. Therefore it is preferable to run assessStrategyGlobal several times
     with slights changes in the training set lenght, and then combine the predictions.
-    This is what this function does (majority voting for the cobination and average of the
-    confidences of the models).
+    This is what this function does.
     """
     confTest1=assessStrategyGlobal(km,dur_train,duration_val_matches,delta,xgb_params,nb_players,nb_tournaments,xtrain,data,"1")
     confTest2=assessStrategyGlobal(km,dur_train-10,duration_val_matches,delta,xgb_params,nb_players,nb_tournaments,xtrain,data,"2")
@@ -160,6 +160,10 @@ def vibratingAssessStrategyGlobal(km,dur_train,duration_val_matches,delta,xgb_pa
         conf=0
     return conf
 def mer(t):
+    # If more than half the models choose the right outcome for the match, we can say
+    # in real situation we would have been right. Otherwise wrong.
+    # And the confidence in the chosen outcome is the mean of the confidences of the models
+    # that chose this outcome.
     w=np.array([t[0],t[1],t[2],t[3],t[4],t[5],t[6]]).astype(bool)
     conf=np.array([t[7],t[8],t[9],t[10],t[11],t[12],t[13]])
     if w.sum()>=4:
