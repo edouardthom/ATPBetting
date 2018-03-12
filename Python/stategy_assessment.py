@@ -8,25 +8,31 @@ import seaborn as sns
 
 ############################### STRATEGY ASSESSMENT ############################
 
-def xgbModelBinary(xtrain,ytrain,xtest,ytest,p,sample_weights=None):
-	#Here xtest and ytest are also used for early stopping (validation set)
-	if sample_weights==None:
-		dtrain=xgb.DMatrix(xtrain,label=ytrain)
-	else:
-		dtrain=xgb.DMatrix(xtrain,label=ytrain,weight=sample_weights)
-	dtest=xgb.DMatrix(xtest,label=ytest)
-	eval_set = [(dtrain,"train_loss"),(dtest, 'eval')]
-	params={'eval_metric':"logloss","objective":"binary:logistic",'subsample':0.8,
-		 'min_child_weight':p[2],'alpha':p[6],'lambda':p[5],'max_depth':int(p[1]),
-		 'gamma':p[3],'eta':p[0],'colsample_bytree':p[4]}
-	model=xgb.train(params, dtrain, int(p[7]),evals=eval_set,early_stopping_rounds=int(p[8]))
-	prediction= model.predict(dtest)
-	return prediction,model
+def xgbModelBinary(xtrain,ytrain,xval,yval,p,sample_weights=None):
+    """
+    XGB model training. 
+    Early stopping is performed using xval and yval (validation set).
+    Outputs the trained model, and the prediction on the validation set
+    """
+    if sample_weights==None:
+        dtrain=xgb.DMatrix(xtrain,label=ytrain)
+    else:
+        dtrain=xgb.DMatrix(xtrain,label=ytrain,weight=sample_weights)
+    dtest=xgb.DMatrix(xval,label=yval)
+    eval_set = [(dtrain,"train_loss"),(dtest, 'eval')]
+    params={'eval_metric':"logloss","objective":"binary:logistic",'subsample':0.8,
+            'min_child_weight':p[2],'alpha':p[6],'lambda':p[5],'max_depth':int(p[1]),
+            'gamma':p[3],'eta':p[0],'colsample_bytree':p[4]}
+    model=xgb.train(params, dtrain, int(p[7]),evals=eval_set,early_stopping_rounds=int(p[8]))
+    prediction= model.predict(dtest)
+    return prediction,model
 
 
 def sel_match_confidence(x):
     """
-    One possible betting strategy
+    One possible betting strategy.
+    the confidence level in the outcome we chose (player1 wins or player2 wins) is
+    the ratio of our predicted probability and the implied probability by the bookmaker.
     """
     if x[0]>x[1]: # ie. if we bet on player1
         return x[0]/x[2] 
