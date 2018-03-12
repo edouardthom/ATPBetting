@@ -14,7 +14,10 @@ from utilities import *
 ######################### Building of the raw dataset ##########################
 ################################################################################
 
-### Importation of the Excel files - 1 per year
+### Importation of the Excel files - 1 per year (from tennis.co.uk)
+# Some preprocessing is necessary because for several years the odds are not present
+# We consider only the odds of Bet365 and Pinnacle.
+
 import glob
 filenames=list(glob.glob("../Data/20*.xls*"))
 l = [pd.read_excel(filename,encoding='latin-1') for filename in filenames]
@@ -94,6 +97,7 @@ basic_horizontal_barplot(values,labels,xaxis_label,title,xlim,figsize=None)
 ################################################################################
 ###################### Building of the enriched dataset ########################
 ################################################################################
+### We'll add some features to the dataset
 
 data=pd.read_csv("../Generated Data/atp_data.csv")
 data.Date = data.Date.apply(lambda x:datetime.strptime(x, '%Y-%m-%d'))
@@ -109,8 +113,9 @@ players_encoded=players_features_encoding(nb_players,data)
 cat_features=pd.concat([cat_features,tournaments_encoded,players_encoded],1)
 
 ######################### The period that interests us #########################
-
-beg=datetime(2008,1,1) #prior to 2003, Date is the starting date of the tournament
+### We'll perform the training and testing during this period. But the matches before 
+### are used, for example to compute the elo rankings.
+beg=datetime(2008,1,1) 
 end=data.Date.iloc[-1]
 indices=data[(data.Date>beg)&(data.Date<=end)].index
 
@@ -137,9 +142,9 @@ cat_features=cat_features.iloc[indices,:].reset_index(drop=True)
 elo_features=ranking_elo.iloc[indices,:].reset_index(drop=True)
 
 ############################### Duplication of rows ############################
-## For the moment we have one row per match. We "duplicate" each row to have one
-## for each outcome of the matcch. Of course it isn't a simple duplicattion of
-## each row, we need to invert some features
+## For the moment we have one row per match. 
+## We "duplicate" each row to have one row for each outcome of the match. 
+## Of course it isn't a simple duplication of  each row, we need to "invert" some features
 
 # Elo data
 elo_1=elo_features
@@ -155,12 +160,14 @@ cat_features=pd.DataFrame(np.repeat(cat_features.values,2, axis=0),columns=cat_f
 
 # cotes features
 cotes_features=pd.Series(cotes_features.values.flatten(),name="odds")
+cotes_features=pd.DataFrame(cotes_features)
 
-# Building of the final dataset
+### Building of the final dataset
+# You can remove some features to see the effect on the ROI
 xtrain=pd.concat([cotes_features,
-                  elo_features,
-                  cat_features,
-                  player_features,duo_features,general_features,recent_features],1)
+                  #elo_features,
+                  cat_features],1)
+                  #player_features,duo_features,general_features,recent_features],1)
 
 xtrain.to_csv("../Generated Data/atp_data_features.csv",index=False)
 
@@ -179,7 +186,7 @@ xtrain.to_csv("../Generated Data/atp_data_features.csv",index=False)
 ######################### Confidence computing for each match ############################
 
 start_date=datetime(2013,1,1) #first day of test set
-start_match=data[data.Date==start_date].index[0]
+start_match=data[data.Date==start_date].index[0] #id of the first match of the testing set
 span_matches=len(data)-start_match+1
 duration_val_matches=300
 delta=2000
@@ -209,18 +216,21 @@ for test_beginning_match in key_matches:
     confs.append(conf)
 confs=[el for el in confs if type(el)!=int]
 conf=pd.concat(confs,0)
-## We add the date to the confidence dataset
+## We add the date to the confidence dataset (can be useful for analysis later)
 dates=data.Date.reset_index()
 dates.columns=["match","date"]
 conf=conf.merge(dates,on="match")
 conf=conf.sort_values("confidence0",ascending=False)
 conf=conf.reset_index(drop=True)
 
+
 ## We store this dataset
 conf.to_csv("../Generated Data/confidence_data.csv",index=False)
 
 ## Plot of ROI according to the % of matches we bet on
 plotProfits(conf,"Test on the period Jan. 2013 -> March 2018")
+
+
 
 
 ################################################################################

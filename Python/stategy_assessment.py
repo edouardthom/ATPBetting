@@ -44,9 +44,10 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     """
     ########## Training/validation/testing set generation
     
-    # Number of matches we in our training set 
+    # Number of matches in our dataset (ie. nb. of outcomes divided by 2)
     nm=int(len(xtrain)/2)
     
+    # Id of the first and last match of the testing,validation,training set
     beg_test=test_beginning_match
     end_test=min(test_beginning_match+duration_test_matches-1,nm-1)
     end_val=min(beg_test-1,nm-1)

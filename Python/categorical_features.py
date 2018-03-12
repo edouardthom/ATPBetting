@@ -7,9 +7,13 @@ from sklearn.preprocessing import OneHotEncoder
 
 ############################### CATEGORICAL FEATURES ENCODING ##################
 
+### The features "player1", "player2" and "Tournament" are treated differently
+### from the other features. 
+
 def categorical_features_encoding(cat_features):
     """
     Categorical features encoding.
+    Simple one-hot encoding.
     """
     cat_features=cat_features.apply(preprocessing.LabelEncoder().fit_transform)
     ohe=OneHotEncoder()
@@ -21,10 +25,13 @@ def categorical_features_encoding(cat_features):
 
 def players_features_encoding(nb_players,data):
     """
-    Encoding of the players . We limit the number of players.
+    Encoding of the players . 
+    We limit the number of players : we'll keep only the 
+    players that won the most matches to avoid overfitting (usually 80 players).
+    The other players are encoded in the column "famous_player_other".
     The players are not encoded like the other categorical features because for each
-    row we encode both players at the same time (we put a 1 in each row corresponding 
-    to a player for each match).
+    match we encode both players at the same time (we put a 1 in each row corresponding 
+    to the players playing the match for each match).
     """
     players=list(data.Winner.value_counts().index[:nb_players])
     winners=data.Winner.apply(lambda x:x if x in players else "other")
@@ -45,7 +52,8 @@ def players_features_encoding(nb_players,data):
 
 def tournaments_features_encoding(nb_tournaments,data):
     """
-    Encoding of the tournaments . We limit the number of players.
+    Encoding of the tournaments . We limit the number of tournaments to avoid overfitting.
+    (see players_features_encoding)
     """
     tournaments=list(data.Tournament.value_counts().index[:nb_tournaments])
     tournament=data.Tournament.apply(lambda x:x if x in tournaments else "other")
