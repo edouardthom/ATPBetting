@@ -28,17 +28,6 @@ def xgbModelBinary(xtrain,ytrain,xval,yval,p,sample_weights=None):
     return model
 
 
-def sel_match_confidence(x):
-    """
-    One possible betting strategy.
-    the confidence level in the outcome we chose (player1 wins or player2 wins) is
-    the ratio of our predicted probability and the implied probability by the bookmaker.
-    """
-    if x[0]>x[1]: # ie. if we bet on player1
-        return x[0]/x[2] 
-    else:
-        return x[1]/x[3] 
-
 def assessStrategyGlobal(test_beginning_match,
                          duration_train_matches,
                          duration_val_matches,
@@ -50,11 +39,11 @@ def assessStrategyGlobal(test_beginning_match,
                          data,
                          model_name="0"):
     """
-    Given the ids of the first match of the testing set (id=index in the dataframe "data"),
+    Given the id of the first match of the testing set (id=index in the dataframe "data"),
     outputs the confidence dataframe.
     The confidence dataframe tells for each match is our prediction is right, and for
     the outcome we chose, the confidence level.
-    the confidence level is simply the probability we predicted divided by the probability
+    The confidence level is simply the probability we predicted divided by the probability
     implied by the bookmaker (=1/odd).
     """
     ########## Training/validation/testing set generation
@@ -105,32 +94,34 @@ def assessStrategyGlobal(test_beginning_match,
     ### ML model training
     model=xgbModelBinary(xtrain,ytrain,xval,yval,xgb_params,sample_weights=None)
     
-    ### Prediction of probabilities for the testing set
-    dtest=xgb.DMatrix(xtest,label=None)
-    pred_test= model.predict(dtest) #1 prediction/match outcome
+    # The probability given by the model to each outcome of each match :
+    pred_test= model.predict(xgb.DMatrix(xtest,label=None)) 
+    # For each match, the winning probability the model gave to the players that won (should be high...) :
     prediction_test_winner=pred_test[range(0,len(pred_test),2)]
+    # For each match, the winning probability the model gave to the players that lost (should be low...) :
     prediction_test_loser=pred_test[range(1,len(pred_test),2)]
     
-    ### Gathering of the odds and predicted probabilities  for the testing set (1 row/match)
-    odd_for_each_outcome=data[["PSW","PSL"]].values.flatten()
-    odd_for_each_outcome=pd.Series(odd_for_each_outcome,name="cotes")
-    proba_bookmaker_for_each_outcome=(1/odd_for_each_outcome).iloc[test_indices].reset_index(drop=True)
-    proba_bookmaker_winner=proba_bookmaker_for_each_outcome[list(range(0,len(proba_bookmaker_for_each_outcome),2))].values
-    proba_bookmaker_loser=proba_bookmaker_for_each_outcome[list(range(1,len(proba_bookmaker_for_each_outcome),2))].values
-    p=pd.Series(list(zip(prediction_test_winner,prediction_test_loser,proba_bookmaker_winner,proba_bookmaker_loser)))
+    ### Odds and predicted probabilities for the testing set (1 row/match)
+    odds=data[["PSW","PSL"]].iloc[range(beg_test,end_test+1)]
+    implied_probabilities=1/odds
+    p=pd.Series(list(zip(prediction_test_winner,prediction_test_loser,implied_probabilities.PSW,implied_probabilities.PSL)))
 
-    ### The model opinion on each match + the confidence in the chosen outcome
-    bet_confidence_matches=p.apply(lambda x:sel_match_confidence(x))
-    matches_bet_good=(prediction_test_winner>prediction_test_loser).astype(int)
-    test_indices_notduplicated=np.array(np.array(test_indices)[range(0,len(test_indices),2)]/2).astype(int)
-    confidence=pd.DataFrame({"match":test_indices_notduplicated,"win"+model_name:matches_bet_good,"confidence"+model_name:bet_confidence_matches})
-    confidenceTest=confidence.sort_values("confidence"+model_name,ascending=False)
+    ### For each match in the testing set, if the model predicted the right winner :
+    right=(prediction_test_winner>prediction_test_loser).astype(int)
+    ### For each match in the testing set, the confidence of the model in the outcome it chose
+    def sel_match_confidence(x):
+        if x[0]>x[1]:
+            return x[0]/x[2] 
+        else:
+            return x[1]/x[3] 
+    confidence=p.apply(lambda x:sel_match_confidence(x))
     
-    
-    ### We join the odds for the winners, to be able to compute the ROI later
-    c=data[["PSW"]].reset_index()
-    c.columns=["match","PSW"]
-    confidenceTest=confidenceTest.merge(c,how="left",on="match")
+    ### The final confidence dataset 
+    confidenceTest=pd.DataFrame({"match":range(beg_test,end_test+1),
+                                 "win"+model_name:right,
+                                 "confidence"+model_name:confidence,
+                                 "PSW":odds.PSW.values})
+    confidenceTest=confidenceTest.sort_values("confidence"+model_name,ascending=False).reset_index(drop=True)
     
     return confidenceTest
 
@@ -184,20 +175,18 @@ def mer(t):
 
 ############################### PROFITS COMPUTING AND VISUALIZATION ############
 
-def profitComputation(percentage_matchs,conf,model_name="0"):
+def profitComputation(percentage,confidence,model_name="0"):
     """
-    Given a confidence dataset and a percentage of matches, computes the ROI 
-    if we bet only on the percentage of matches we have the most confidence in
-    (same amount of money for each match).
+    Input : percentage of matches we want to bet on,confidence dataset
+    Output : ROI
     """
-    coeff=percentage_matchs/100
-    lim=int(coeff*len(conf))
-    conf=conf.sort_values("confidence"+model_name,ascending=False)
-    conf=conf.iloc[:lim,:]
-    profit=100*(conf.PSW[conf["win"+model_name]==1].sum()-len(conf))/len(conf)
+    tot_number_matches=len(confidence)
+    number_matches_we_bet_on=int(tot_number_matches*(percentage/100))
+    matches_selection=confidence.head(number_matches_we_bet_on)
+    profit=100*(matches_selection.PSW[matches_selection["win"+model_name]==1].sum()-number_matches_we_bet_on)/number_matches_we_bet_on
     return profit
 
-def plotProfits(conf,title=""):
+def plotProfits(confidence,title=""):
     """
     Given a confidence dataset, plots the ROI according to the percentage of matches
     we bet on. 
@@ -205,7 +194,7 @@ def plotProfits(conf,title=""):
     profits=[]
     ticks=range(5,101)
     for i in ticks:
-        p=profitComputation(i,conf)
+        p=profitComputation(i,confidence)
         profits.append(p)
     plt.plot(ticks,profits)
     plt.xticks(range(0,101,5))

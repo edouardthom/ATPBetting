@@ -146,6 +146,7 @@ features.to_csv("../Generated Data/atp_data_features.csv",index=False)
 ## validation (the consecutive matches right before the testing matches)
 
 ######################### Confidence computing for each match ############################
+features=pd.read_csv("../Generated Data/atp_data_features.csv")
 
 start_date=datetime(2013,1,1) #first day of testing set
 test_beginning_match=data[data.Date==start_date].index[0] #id of the first match of the testing set
@@ -171,22 +172,12 @@ early_stop=[5]
 params=np.array(np.meshgrid(learning_rate,max_depth,min_child_weight,gamma,csbt,lambd,alpha,num_rounds,early_stop)).T.reshape(-1,9).astype(np.float)
 xgb_params=params[0]
 
-assessStrategyGlobal(test_beginning_match,
-                         duration_train_matches,
-                         duration_val_matches,
-                         duration_test_matches,
-                         xgb_params,
-                         nb_players,
-                         nb_tournaments,
-                         features,
-                         data,
-                         model_name="0")
 
 ## We predict the confidence in each outcome, "duration_test_matches" matches at each iteration
 key_matches=np.array([test_beginning_match+duration_test_matches*i for i in range(int(span_matches/duration_test_matches)+1)])
 confs=[]
-for test_beginning_match in key_matches:
-    conf=vibratingAssessStrategyGlobal(test_beginning_match,10400,duration_val_matches,duration_test_matches,xgb_params,nb_players,nb_tournaments,xtrain,data)
+for start in key_matches:
+    conf=vibratingAssessStrategyGlobal(start,10400,duration_val_matches,duration_test_matches,xgb_params,nb_players,nb_tournaments,features,data)
     confs.append(conf)
 confs=[el for el in confs if type(el)!=int]
 conf=pd.concat(confs,0)
