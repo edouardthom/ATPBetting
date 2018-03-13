@@ -23,7 +23,7 @@ def categorical_features_encoding(cat_features):
     cat_features=cat_features.astype(int)
     return cat_features
 
-def players_features_encoding(data):
+def features_players_encoding(data):
     """
     Encoding of the players . 
     The players are not encoded like the other categorical features because for each
@@ -45,7 +45,7 @@ def players_features_encoding(data):
     players_encoded=pd.DataFrame(encod,columns=columns)
     return players_encoded
 
-def tournaments_features_encoding(data):
+def features_tournaments_encoding(data):
     """
     Encoding of the tournaments . 
     """

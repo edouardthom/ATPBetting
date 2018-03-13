@@ -19,14 +19,13 @@ def xgbModelBinary(xtrain,ytrain,xval,yval,p,sample_weights=None):
         dtrain=xgb.DMatrix(xtrain,label=ytrain)
     else:
         dtrain=xgb.DMatrix(xtrain,label=ytrain,weight=sample_weights)
-    dtest=xgb.DMatrix(xval,label=yval)
-    eval_set = [(dtrain,"train_loss"),(dtest, 'eval')]
+    dval=xgb.DMatrix(xval,label=yval)
+    eval_set = [(dtrain,"train_loss"),(dval, 'eval')]
     params={'eval_metric':"logloss","objective":"binary:logistic",'subsample':0.8,
             'min_child_weight':p[2],'alpha':p[6],'lambda':p[5],'max_depth':int(p[1]),
             'gamma':p[3],'eta':p[0],'colsample_bytree':p[4]}
     model=xgb.train(params, dtrain, int(p[7]),evals=eval_set,early_stopping_rounds=int(p[8]))
-    prediction= model.predict(dtest)
-    return prediction,model
+    return model
 
 
 def sel_match_confidence(x):
@@ -40,7 +39,16 @@ def sel_match_confidence(x):
     else:
         return x[1]/x[3] 
 
-def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_val_matches,duration_test_matches,xgb_params,nb_players,nb_tournaments,xtrain,data,model_name="0"):
+def assessStrategyGlobal(test_beginning_match,
+                         duration_train_matches,
+                         duration_val_matches,
+                         duration_test_matches,
+                         xgb_params,
+                         nb_players,
+                         nb_tournaments,
+                         features,
+                         data,
+                         model_name="0"):
     """
     Given the ids of the first match of the testing set (id=index in the dataframe "data"),
     outputs the confidence dataframe.
@@ -52,7 +60,7 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     ########## Training/validation/testing set generation
     
     # Number of matches in our dataset (ie. nb. of outcomes divided by 2)
-    nm=int(len(xtrain)/2)
+    nm=int(len(features)/2)
     
     # Id of the first and last match of the testing,validation,training set
     beg_test=test_beginning_match
@@ -70,9 +78,9 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
         return 0
     
     # Split in train/validation/test
-    xval=xtrain.iloc[val_indices,:].reset_index(drop=True)
-    xtest=xtrain.iloc[test_indices,:].reset_index(drop=True)
-    xtrain=xtrain.iloc[train_indices,:].reset_index(drop=True)
+    xval=features.iloc[val_indices,:].reset_index(drop=True)
+    xtest=features.iloc[test_indices,:].reset_index(drop=True)
+    xtrain=features.iloc[train_indices,:].reset_index(drop=True)
     ytrain=pd.Series([1,0]*int(len(train_indices)/2))
     yval=pd.Series([1,0]*int(len(val_indices)/2))
     
@@ -94,24 +102,22 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     xval=xval.drop(to_drop_players+to_drop_tournaments,1)
     xtest=xtest.drop(to_drop_players+to_drop_tournaments,1)
     
-    ### ML
-    pred_val,model=xgbModelBinary(xtrain,ytrain,xval,yval,xgb_params,sample_weights=None)
+    ### ML model training
+    model=xgbModelBinary(xtrain,ytrain,xval,yval,xgb_params,sample_weights=None)
     
-    ### Prediction for the testing set
+    ### Prediction of probabilities for the testing set
     dtest=xgb.DMatrix(xtest,label=None)
-    pred_test= model.predict(dtest) #the predicted probability for all the outcomes
+    pred_test= model.predict(dtest) #1 prediction/match outcome
     prediction_test_winner=pred_test[range(0,len(pred_test),2)]
     prediction_test_loser=pred_test[range(1,len(pred_test),2)]
     
     ### Gathering of the odds and predicted probabilities  for the testing set (1 row/match)
-    cotes_full=data[["PSW","PSL"]].values.flatten()
-    cotes_full=pd.Series(cotes_full,name="cotes")
-    pred_book=(1/cotes_full).iloc[test_indices].reset_index(drop=True).fillna(1)
-    pred_book_win=pred_book[list(range(0,len(pred_book),2))].values
-    pred_book_loser=pred_book[list(range(1,len(pred_book),2))].values
-    pred_p1=pred_test[range(0,len(pred_test),2)]
-    pred_p2=pred_test[range(1,len(pred_test),2)]
-    p=pd.Series(list(zip(pred_p1,pred_p2,pred_book_win,pred_book_loser)))
+    odd_for_each_outcome=data[["PSW","PSL"]].values.flatten()
+    odd_for_each_outcome=pd.Series(odd_for_each_outcome,name="cotes")
+    proba_bookmaker_for_each_outcome=(1/odd_for_each_outcome).iloc[test_indices].reset_index(drop=True)
+    proba_bookmaker_winner=proba_bookmaker_for_each_outcome[list(range(0,len(proba_bookmaker_for_each_outcome),2))].values
+    proba_bookmaker_loser=proba_bookmaker_for_each_outcome[list(range(1,len(proba_bookmaker_for_each_outcome),2))].values
+    p=pd.Series(list(zip(prediction_test_winner,prediction_test_loser,proba_bookmaker_winner,proba_bookmaker_loser)))
 
     ### The model opinion on each match + the confidence in the chosen outcome
     bet_confidence_matches=p.apply(lambda x:sel_match_confidence(x))
@@ -119,7 +125,8 @@ def assessStrategyGlobal(test_beginning_match,duration_train_matches,duration_va
     test_indices_notduplicated=np.array(np.array(test_indices)[range(0,len(test_indices),2)]/2).astype(int)
     confidence=pd.DataFrame({"match":test_indices_notduplicated,"win"+model_name:matches_bet_good,"confidence"+model_name:bet_confidence_matches})
     confidenceTest=confidence.sort_values("confidence"+model_name,ascending=False)
-   
+    
+    
     ### We join the odds for the winners, to be able to compute the ROI later
     c=data[["PSW"]].reset_index()
     c.columns=["match","PSW"]

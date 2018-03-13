@@ -9,6 +9,7 @@ def compute_elo_rankings(data):
     the elo ranking of the 2 players at the beginning of the match
     
     """
+    print("Elo rankings computing...")
     players=list(pd.Series(list(data.Winner)+list(data.Loser)).value_counts().index)
     elo=pd.Series(np.ones(len(players))*1500,index=players)
     ranking_elo=[(1500,1500)]
