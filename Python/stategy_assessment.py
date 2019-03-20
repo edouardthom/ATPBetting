@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import xgboost as xgb
 import seaborn as sns
